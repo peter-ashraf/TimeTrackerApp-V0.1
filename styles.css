@@ -1091,7 +1091,7 @@ h1 {
 /* Manual time buttons under employee card (mobile only) */
 .manual-time-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   /* hidden by default (desktop) */
   margin-top: var(--space-12);
   gap: var(--space-8);
@@ -1488,6 +1488,12 @@ body.salary-blur .overtime-money-amount {
   padding-right: var(--space-32);
 }
 
+.interval-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+}
+
 @media (prefers-color-scheme: dark) {
   .form-group select {
     background-image: var(--select-caret-dark);
@@ -1504,9 +1510,8 @@ body.salary-blur .overtime-money-amount {
 
 /* MONTH SELECTOR */
 .month-selector {
-  
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-10);
 }
 
@@ -1985,4 +1990,218 @@ body.salary-blur .overtime-money-amount {
     padding: var(--space-4) var(--space-6);
     font-size: var(--font-size-sm);
   }
+}
+
+
+/* Clickable stats styling */
+.clickable-stat {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.clickable-stat::after {
+  content: '👆';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.clickable-stat:hover {
+  background: var(--color-secondary-hover);
+  transform: scale(1.03);
+}
+
+.clickable-stat:hover::after {
+  opacity: 0.7;
+}
+
+.clickable-stat:active {
+  transform: scale(0.98);
+}
+
+/* Days details modal */
+.modal-days-details {
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-days-details .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-16);
+  border-bottom: 1px solid var(--color-card-border);
+}
+
+.modal-days-details .modal-header h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  color: var(--color-primary);
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  font-size: var(--font-size-4xl);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+
+.btn-close:hover {
+  background: var(--color-secondary);
+  color: var(--color-error);
+}
+
+.days-total {
+  background: var(--color-secondary);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-base);
+  margin-bottom: var(--space-16);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.total-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.days-details-container {
+  overflow-y: auto;
+  max-height: 50vh;
+  padding-right: var(--space-8);
+}
+
+.days-month-group {
+  margin-bottom: var(--space-20);
+}
+
+.days-month-header {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-12);
+  padding-bottom: var(--space-8);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.days-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.day-entry {
+  background: var(--color-background);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-base);
+  padding: var(--space-12);
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+
+.day-entry:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.day-entry-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 120px;
+  gap: var(--space-12);
+  align-items: center;
+}
+
+.day-date {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+}
+
+.day-type {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.day-times {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: right;
+  font-family: var(--font-family-mono);
+}
+
+.day-notes {
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-card-border-inner);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .modal-days-details {
+    max-width: 100%;
+    max-height: 90vh;
+  }
+  
+  .day-entry-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  
+  .day-times {
+    text-align: left;
+  }
+  
+  .days-details-container {
+    max-height: 60vh;
+  }
+}
+
+
+/* Year selector in modal */
+.days-year-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  margin-bottom: var(--space-16);
+  padding: var(--space-12);
+  background: var(--color-background);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--color-card-border);
+}
+
+.days-year-selector label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.days-year-selector select {
+  flex: 0 0 120px;
+  margin: 0;
 }
