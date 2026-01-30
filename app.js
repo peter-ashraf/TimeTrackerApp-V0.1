@@ -7,6 +7,7 @@ class TimeTrackerApp {
     this.hideSalary = localStorage.getItem('hideSalary') === 'true';
     this.theme = localStorage.getItem('theme') || 'light';
     this.initializePeriods();
+    this.selectedPeriodId = null;
     this.init();
   }
 
@@ -360,46 +361,7 @@ class TimeTrackerApp {
 });
   }
 
-
-  setManualTime(mode, dateStr, timeStr) {
-  const entries = JSON.parse(localStorage.getItem('timeEntries') || '[]');
-
-  let entry = entries.find(e => e.date === dateStr);
-
-  if (!entry) {
-    entry = {
-      date: dateStr,
-      type: 'Regular',
-      intervals: []
-    };
-    entries.push(entry);
-  }
-
-  if (!entry.intervals) entry.intervals = [];
-
-  const lastInterval = entry.intervals[entry.intervals.length - 1];
-
-  if (mode === 'checkIn') {
-    if (lastInterval && !lastInterval.out) {
-      this.showAlert('⚠️ Already checked in');
-      return;
-    }
-    entry.intervals.push({ in: timeStr, out: null });
-  }
-
-  if (mode === 'checkOut') {
-    if (!lastInterval || lastInterval.out) {
-      this.showAlert('⚠️ No active check-in');
-      return;
-    }
-    lastInterval.out = timeStr;
-  }
-
-  localStorage.setItem('timeEntries', JSON.stringify(entries));
-  this.renderDashboard();
-}
-
-renderTimesheet() {
+  renderTimesheet() {
   const timesheet = document.getElementById('timesheetScreen');
   const data = this.getTimesheetData();
   const use12Hour = localStorage.getItem('use12HourFormat') === 'true';
@@ -464,19 +426,24 @@ renderTimesheet() {
       // Old month-based system
       this.currentMonth = new Date(e.target.value);
     } else {
-      // New period system
-      this.setCurrentPeriodId(e.target.value);
+      // New period system - temporarily set for display ONLY
+      // Don't use setCurrentPeriodId() - that changes the official "current" badge
+      this.selectedPeriodId = e.target.value; // ✅ NEW: Temporary display variable
     }
     
     this.renderTimesheet();
-    this.renderDashboard(); // ✅ Update dashboard when period changes
+    this.renderDashboard(); // ✅ Update dashboard with selected period data
   });
 
-  // Time format toggle
+  // Time format toggle - UPDATE WITHOUT RE-RENDERING
   document.getElementById('timeFormatToggle').addEventListener('change', (e) => {
     const use12Hour = e.target.checked;
     localStorage.setItem('use12HourFormat', use12Hour);
+    
+    // Update label text manually (no re-render)
     document.querySelector('.toggle-label').textContent = use12Hour ? '12h' : '24h';
+    
+    // Only refresh the table data
     this.populateTimesheetTable();
   });
 
@@ -492,6 +459,238 @@ renderTimesheet() {
     btn.addEventListener('click', () => this.openAddBreakModal());
   });
 }
+
+
+  setManualTime(mode, dateStr, timeStr) {
+  const entries = JSON.parse(localStorage.getItem('timeEntries') || '[]');
+
+  let entry = entries.find(e => e.date === dateStr);
+
+  if (!entry) {
+    entry = {
+      date: dateStr,
+      type: 'Regular',
+      intervals: []
+    };
+    entries.push(entry);
+  }
+
+  if (!entry.intervals) entry.intervals = [];
+
+  const lastInterval = entry.intervals[entry.intervals.length - 1];
+
+  if (mode === 'checkIn') {
+    if (lastInterval && !lastInterval.out) {
+      this.showAlert('⚠️ Already checked in');
+      return;
+    }
+    entry.intervals.push({ in: timeStr, out: null });
+  }
+
+  if (mode === 'checkOut') {
+    if (!lastInterval || lastInterval.out) {
+      this.showAlert('⚠️ No active check-in');
+      return;
+    }
+    lastInterval.out = timeStr;
+  }
+
+  localStorage.setItem('timeEntries', JSON.stringify(entries));
+  this.renderDashboard();
+}
+
+renderSettings() {
+    const settings = document.getElementById('settingsScreen');
+    const savedSalary = localStorage.getItem('salary') || '';
+    const salaryDisplay = this.hideSalary ? '' : savedSalary;
+    
+    // Get periods data
+    const periods = this.getPayPeriods();
+    const currentPeriodId = this.getCurrentPeriodId();
+    const today = this.formatDate(new Date());
+    
+    // Categorize periods
+    const currentPeriod = periods.find(p => p.start <= today && p.end >= today);
+    const pastPeriods = periods.filter(p => p.end < today).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const upcomingPeriods = periods.filter(p => p.start > today).sort((a, b) => new Date(a.start) - new Date(b.start));
+    
+    // Get collapse states from localStorage (default: collapsed)
+    const pastCollapsed = localStorage.getItem('pastPeriodsCollapsed') !== 'false';
+    const upcomingCollapsed = localStorage.getItem('upcomingPeriodsCollapsed') !== 'false';
+    
+    // Build periods HTML
+    let periodsHtml = '';
+    
+    if (periods.length === 0) {
+      periodsHtml = '<p style="text-align: center; padding: 20px; color: var(--color-text-secondary);">No pay periods defined. Add your first period below.</p>';
+    } else {
+      // Helper function to render a period item
+      const renderPeriodItem = (period) => {
+        const isCurrent = period.id === currentPeriodId;
+        return `
+          <div class="period-item ${isCurrent ? 'period-current' : ''}">
+            <div class="period-info">
+              <span class="period-label">${period.label}</span>
+              ${isCurrent ? '<span class="period-badge">Current ✓</span>' : ''}
+            </div>
+            <div class="period-actions">
+              ${!isCurrent ? `<button class="btn btn-sm btn-outline" onclick="app.setCurrentPeriod('${period.id}')">Set Current</button>` : ''}
+              <button class="btn btn-sm btn-outline" onclick="app.openEditPeriodModal('${period.id}')">✏️ Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="app.confirmDeletePeriod('${period.id}')">🗑️ Delete</button>
+            </div>
+          </div>
+        `;
+      };
+      
+      // Current Period Section (always visible)
+      if (currentPeriod) {
+        periodsHtml += `
+          <div class="period-section">
+            <h4 class="period-section-header current-period-header">
+              📅 CURRENT PERIOD
+            </h4>
+            <div class="period-section-content">
+              ${renderPeriodItem(currentPeriod)}
+            </div>
+          </div>
+        `;
+      }
+      
+      // Past Periods Section (collapsible)
+      if (pastPeriods.length > 0) {
+        periodsHtml += `
+          <div class="period-section">
+            <h4 class="period-section-header collapsible ${pastCollapsed ? 'collapsed' : ''}" onclick="app.togglePeriodSection('past')">
+              <span class="collapse-arrow">${pastCollapsed ? '▶' : '▼'}</span>
+              PAST PERIODS (${pastPeriods.length})
+            </h4>
+            <div class="period-section-content ${pastCollapsed ? 'collapsed' : ''}">
+              ${pastPeriods.map(p => renderPeriodItem(p)).join('')}
+            </div>
+          </div>
+        `;
+      }
+      
+      // Upcoming Periods Section (collapsible)
+      if (upcomingPeriods.length > 0) {
+        periodsHtml += `
+          <div class="period-section">
+            <h4 class="period-section-header collapsible ${upcomingCollapsed ? 'collapsed' : ''}" onclick="app.togglePeriodSection('upcoming')">
+              <span class="collapse-arrow">${upcomingCollapsed ? '▶' : '▼'}</span>
+              UPCOMING PERIODS (${upcomingPeriods.length})
+            </h4>
+            <div class="period-section-content ${upcomingCollapsed ? 'collapsed' : ''}">
+              ${upcomingPeriods.map(p => renderPeriodItem(p)).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    let html = `
+      <h1>Settings</h1>
+      
+      <div class="card settings-card">
+        <h3>Pay Period Management</h3>
+        <p class="settings-description">Define custom pay periods for your timesheet. Periods must be continuous with no gaps or overlaps.</p>
+        
+        <div class="periods-list">
+          ${periodsHtml}
+        </div>
+        
+        <div class="period-actions-bar">
+          <button class="btn btn-primary" id="addPeriodBtn">+ Add Pay Period</button>
+          ${periods.length > 0 ? '<button class="btn btn-secondary" id="assignEntriesBtn">🔄 Assign Entries to Periods</button>' : ''}
+        </div>
+      </div>
+
+      <div class="card settings-card">
+        <h3>Employee Information</h3>
+        <form id="employeeForm">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="fullName" value="${localStorage.getItem('fullName') || ''}" placeholder="Enter full name" required>
+          </div>
+          <div class="form-group">
+            <label>Salary (L.E.)</label>
+            <input type="number" id="salary" value="${salaryDisplay}" placeholder="${this.hideSalary ? '••••••' : 'Enter monthly salary'}" ${this.hideSalary ? 'readonly' : ''} required>
+          </div>
+          <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+        </form>
+      </div>
+
+      <div class="card settings-card">
+        <h3>Leave Settings</h3>
+        <form id="leaveForm">
+          <div class="form-group">
+            <label>Annual Vacation Days</label>
+            <input type="number" id="annualVacation" value="${localStorage.getItem('annualVacation') || '10'}" placeholder="Annual vacation days">
+          </div>
+          <div class="form-group">
+            <label>Sick Leave Days</label>
+            <input type="number" id="sickDays" value="${localStorage.getItem('sickDays') || '7'}" placeholder="Sick leave days">
+          </div>
+          <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+        </form>
+      </div>
+
+      <div class="card settings-card">
+        <h3>Danger Zone</h3>
+        <p>Be careful with these actions - they cannot be undone!</p>
+        
+        <div class="clear-actions">
+          <button class="btn btn-danger" id="clearDayBtn">🗑️ Clear Current Day</button>
+          <button class="btn btn-danger" id="clearMonthBtn">🗑️ Clear Current Month</button>
+          <button class="btn btn-danger" id="clearAllDataBtn">⚠️ Clear All Data</button>
+        </div>
+
+        <div class="quick-actions">
+          <button class="btn btn-secondary" id="exportCsvBtn">📥 Export CSV</button>
+          <button class="btn btn-outline" id="importCsvBtn">📤 Import CSV</button>
+        </div>
+      </div>
+    `;
+
+    settings.innerHTML = html;
+    
+    // Period management event listeners
+    document.getElementById('addPeriodBtn').addEventListener('click', () => {
+      this.openAddPeriodModal();
+    });
+    
+    if (periods.length > 0) {
+      document.getElementById('assignEntriesBtn').addEventListener('click', () => {
+        this.assignEntriesToPeriods();
+        this.renderSettings();
+      });
+    }
+
+    // Employee form
+    document.getElementById('employeeForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      localStorage.setItem('fullName', document.getElementById('fullName').value);
+      localStorage.setItem('salary', document.getElementById('salary').value);
+      this.showAlert('Employee information saved successfully!');
+      this.renderDashboard();
+    });
+
+    // Leave form
+    document.getElementById('leaveForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      localStorage.setItem('annualVacation', document.getElementById('annualVacation').value);
+      localStorage.setItem('sickDays', document.getElementById('sickDays').value);
+      this.showAlert('Leave settings saved successfully!');
+      this.renderDashboard();
+    });
+
+    // Clear buttons
+    document.getElementById('clearDayBtn').addEventListener('click', () => this.clearCurrentDay());
+    document.getElementById('clearMonthBtn').addEventListener('click', () => this.clearCurrentMonth());
+    document.getElementById('clearAllDataBtn').addEventListener('click', () => this.clearAllData());
+    document.getElementById('exportCsvBtn').addEventListener('click', () => this.exportCSV());
+    document.getElementById('importCsvBtn').addEventListener('click', () => this.triggerFileInput());
+  }
+
 
 attachStaticListeners() {
   // Time format toggle logic
@@ -600,144 +799,6 @@ getTimesheetTotals() {
 
   return totalExtraHoursWithFactor;
 }
-
-  renderSettings() {
-    const settings = document.getElementById('settingsScreen');
-    const savedSalary = localStorage.getItem('salary') || '';
-    const salaryDisplay = this.hideSalary ? '' : savedSalary;
-    
-    // ✅ NEW: Get periods data
-    const periods = this.getPayPeriods();
-    const currentPeriodId = this.getCurrentPeriodId();
-    
-    // ✅ NEW: Build periods list HTML
-    let periodsHtml = '';
-    
-    if (periods.length === 0) {
-      periodsHtml = '<p style="text-align: center; padding: 20px; color: var(--color-text-secondary);">No pay periods defined. Add your first period below.</p>';
-    } else {
-      periods.forEach(period => {
-        const isCurrent = period.id === currentPeriodId;
-        periodsHtml += `
-          <div class="period-item ${isCurrent ? 'period-current' : ''}">
-            <div class="period-info">
-              <span class="period-label">${period.label}</span>
-              ${isCurrent ? '<span class="period-badge">Current</span>' : ''}
-            </div>
-            <div class="period-actions">
-              ${!isCurrent ? `<button class="btn btn-sm btn-outline" onclick="app.setCurrentPeriod('${period.id}')">Set Current</button>` : ''}
-              <button class="btn btn-sm btn-outline" onclick="app.openEditPeriodModal('${period.id}')">✏️ Edit</button>
-              <button class="btn btn-sm btn-danger" onclick="app.confirmDeletePeriod('${period.id}')">🗑️ Delete</button>
-            </div>
-          </div>
-        `;
-      });
-    }
-
-    let html = `
-      <h1>Settings</h1>
-      
-      <!-- ✅ NEW: Pay Period Management Section -->
-      <div class="card settings-card">
-        <h3>Pay Period Management</h3>
-        <p class="settings-description">Define custom pay periods for your timesheet. Periods must be continuous with no gaps or overlaps.</p>
-        
-        <div class="periods-list">
-          ${periodsHtml}
-        </div>
-        
-        <button class="btn btn-primary" id="addPeriodBtn">+ Add Pay Period</button>
-        
-        ${periods.length > 0 ? '<button class="btn btn-secondary" id="assignEntriesBtn" style="margin-left: 10px;">🔄 Assign Entries to Periods</button>' : ''}
-      </div>
-
-      <div class="card settings-card">
-        <h3>Employee Information</h3>
-        <form id="employeeForm">
-          <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" id="fullName" value="${localStorage.getItem('fullName') || ''}" placeholder="Enter full name" required>
-          </div>
-          <div class="form-group">
-            <label>Salary (L.E.)</label>
-            <input type="number" id="salary" value="${salaryDisplay}" placeholder="${this.hideSalary ? '••••••' : 'Enter monthly salary'}" ${this.hideSalary ? 'readonly' : ''} required>
-          </div>
-          <button type="submit" class="btn btn-primary">💾 Save Changes</button>
-        </form>
-      </div>
-
-      <div class="card settings-card">
-        <h3>Leave Settings</h3>
-        <form id="leaveForm">
-          <div class="form-group">
-            <label>Annual Vacation Days</label>
-            <input type="number" id="annualVacation" value="${localStorage.getItem('annualVacation') || '10'}" placeholder="Annual vacation days">
-          </div>
-          <div class="form-group">
-            <label>Sick Leave Days</label>
-            <input type="number" id="sickDays" value="${localStorage.getItem('sickDays') || '7'}" placeholder="Sick leave days">
-          </div>
-          <button type="submit" class="btn btn-primary">💾 Save Changes</button>
-        </form>
-      </div>
-
-      <div class="card settings-card">
-        <h3>Danger Zone</h3>
-        <p>Be careful with these actions - they cannot be undone!</p>
-        
-        <div class="clear-actions">
-          <button class="btn btn-danger" id="clearDayBtn">🗑️ Clear Current Day</button>
-          <button class="btn btn-danger" id="clearMonthBtn">🗑️ Clear Current Month</button>
-          <button class="btn btn-danger" id="clearAllDataBtn">⚠️ Clear All Data</button>
-        </div>
-
-        <div class="quick-actions">
-          <button class="btn btn-secondary" id="exportCsvBtn">📥 Export CSV</button>
-          <button class="btn btn-outline" id="importCsvBtn">📤 Import CSV</button>
-        </div>
-      </div>
-    `;
-
-    settings.innerHTML = html;
-    
-    // ✅ NEW: Period management event listeners
-    document.getElementById('addPeriodBtn').addEventListener('click', () => {
-      this.openAddPeriodModal();
-    });
-    
-    if (periods.length > 0) {
-      document.getElementById('assignEntriesBtn').addEventListener('click', () => {
-        this.assignEntriesToPeriods();
-        this.renderSettings();
-      });
-    }
-
-    // Employee form
-    document.getElementById('employeeForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      localStorage.setItem('fullName', document.getElementById('fullName').value);
-      localStorage.setItem('salary', document.getElementById('salary').value);
-      this.showAlert('Employee information saved successfully!');
-      this.renderDashboard();
-    });
-
-    // Leave form
-    document.getElementById('leaveForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      localStorage.setItem('annualVacation', document.getElementById('annualVacation').value);
-      localStorage.setItem('sickDays', document.getElementById('sickDays').value);
-      this.showAlert('Leave settings saved successfully!');
-      this.renderDashboard();
-    });
-
-    // Clear buttons
-    document.getElementById('clearDayBtn').addEventListener('click', () => this.clearCurrentDay());
-    document.getElementById('clearMonthBtn').addEventListener('click', () => this.clearCurrentMonth());
-    document.getElementById('clearAllDataBtn').addEventListener('click', () => this.clearAllData());
-    document.getElementById('exportCsvBtn').addEventListener('click', () => this.exportCSV());
-    document.getElementById('importCsvBtn').addEventListener('click', () => this.triggerFileInput());
-  }
-
 
   clearCurrentDay() {
     if (confirm('Are you sure you want to clear data for today? This cannot be undone!')) {
@@ -1747,7 +1808,11 @@ calculateWorkTime(intervals, date) {
 
   getTimesheetData() {
   const entries = JSON.parse(localStorage.getItem('timeEntries') || '[]');
-  const period = this.getCurrentPeriod();
+  
+  // ✅ UPDATED: Check for temporary selection first, then fall back to current period
+  const selectedPeriodId = this.selectedPeriodId || this.getCurrentPeriodId();
+  const periods = this.getPayPeriods();
+  const period = periods.find(p => p.id === selectedPeriodId);
   
   if (!period) {
     // Fallback to old month-based filtering
@@ -1797,6 +1862,7 @@ calculateWorkTime(intervals, date) {
   };
 }
 
+
   getEmployeeData() {
     return {
       name: localStorage.getItem('fullName') || 'Enter Employee Name in Settings Tab...',
@@ -1839,6 +1905,14 @@ calculateWorkTime(intervals, date) {
     };
   }
 
+togglePeriodSection(section) {
+  const key = section === 'past' ? 'pastPeriodsCollapsed' : 'upcomingPeriodsCollapsed';
+  const currentState = localStorage.getItem(key) !== 'false';
+  const newState = !currentState;
+  
+  localStorage.setItem(key, newState);
+  this.renderSettings();
+}
 
 
   exportCSV() {
@@ -2429,57 +2503,83 @@ generatePeriodLabel(startDate, endDate) {
 }
 
 validatePeriod(start, end, excludeId = null) {
-  const periods = this.getPayPeriods().filter(p => p.id !== excludeId);
+  let periods = this.getPayPeriods().filter(p => p.id !== excludeId);
   
   // Check if start is before end
   if (start >= end) {
     return { valid: false, message: 'End date must be after start date' };
   }
   
-  // Check for overlaps or gaps
+  // If no existing periods, it's valid
+  if (periods.length === 0) {
+    return { valid: true };
+  }
+  
+  // Sort periods by start date
+  periods.sort((a, b) => new Date(a.start) - new Date(b.start));
+  
+  // Helper functions
+  const nextDay = (date) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + 1);
+    return this.formatDate(d);
+  };
+  
+  const prevDay = (date) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() - 1);
+    return this.formatDate(d);
+  };
+  
+  // Check for overlaps with any existing period
   for (const period of periods) {
-    // Check overlap
     if ((start >= period.start && start <= period.end) ||
         (end >= period.start && end <= period.end) ||
         (start <= period.start && end >= period.end)) {
       return { valid: false, message: `Period overlaps with existing period: ${period.label}` };
     }
-    
-    // Check for gaps (periods should be continuous)
-    const nextDay = (date) => {
-      const d = new Date(date);
-      d.setDate(d.getDate() + 1);
-      return this.formatDate(d);
-    };
-    
-    const prevDay = (date) => {
-      const d = new Date(date);
-      d.setDate(d.getDate() - 1);
-      return this.formatDate(d);
-    };
-    
-    // If new period ends day before existing starts, or starts day after existing ends, it's valid
-    if (nextDay(end) === period.start || prevDay(start) === period.end) {
-      continue; // Adjacent periods are OK
+  }
+  
+  // ✅ FIXED: Check if new period fits into the overall timeline
+  const firstPeriod = periods[0];
+  const lastPeriod = periods[periods.length - 1];
+  
+  // Case 1: New period comes before all existing periods
+  if (end < firstPeriod.start) {
+    if (nextDay(end) !== firstPeriod.start) {
+      return { valid: false, message: `Gap detected between ${end} and ${firstPeriod.start}` };
     }
-    
-    // Check if there's a gap
-    if (end < period.start) {
-      const dayAfterEnd = nextDay(end);
-      if (dayAfterEnd < period.start) {
-        return { valid: false, message: `Gap detected between ${end} and ${period.start}` };
-      }
+    return { valid: true };
+  }
+  
+  // Case 2: New period comes after all existing periods
+  if (start > lastPeriod.end) {
+    if (prevDay(start) !== lastPeriod.end) {
+      return { valid: false, message: `Gap detected between ${lastPeriod.end} and ${start}` };
     }
+    return { valid: true };
+  }
+  
+  // Case 3: New period fits between two existing periods
+  for (let i = 0; i < periods.length - 1; i++) {
+    const currentPeriod = periods[i];
+    const nextPeriod = periods[i + 1];
     
-    if (start > period.end) {
-      const dayBeforeStart = prevDay(start);
-      if (dayBeforeStart > period.end) {
-        return { valid: false, message: `Gap detected between ${period.end} and ${start}` };
+    // Check if new period fits in the gap between currentPeriod and nextPeriod
+    if (start > currentPeriod.end && end < nextPeriod.start) {
+      // Verify it fills the gap exactly
+      if (prevDay(start) !== currentPeriod.end) {
+        return { valid: false, message: `Gap detected between ${currentPeriod.end} and ${start}` };
       }
+      if (nextDay(end) !== nextPeriod.start) {
+        return { valid: false, message: `Gap detected between ${end} and ${nextPeriod.start}` };
+      }
+      return { valid: true };
     }
   }
   
-  return { valid: true };
+  // If we reach here, the period doesn't fit anywhere
+  return { valid: false, message: 'Period does not fit into the existing timeline' };
 }
 
 addPayPeriod(start, end) {
@@ -2580,7 +2680,6 @@ assignEntriesToPeriods() {
   
   this.showAlert(`✅ Assigned ${assigned} entries to periods. ${unassigned} entries outside defined periods.`);
 }
-
 
 }
 

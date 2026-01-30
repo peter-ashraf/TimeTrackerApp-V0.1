@@ -2205,3 +2205,104 @@ body.salary-blur .overtime-money-amount {
   flex: 0 0 120px;
   margin: 0;
 }
+
+
+/* Period Section Accordion */
+.period-section {
+  margin-bottom: var(--space-20);
+}
+
+.period-section-header {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-12);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.current-period-header {
+  color: var(--color-primary);
+}
+
+.period-section-header.collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-10);
+  border-radius: var(--radius-base);
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+
+.period-section-header.collapsible:hover {
+  background: var(--color-secondary);
+}
+
+.collapse-arrow {
+  display: inline-block;
+  transition: transform var(--duration-normal) var(--ease-standard);
+  font-size: var(--font-size-sm);
+}
+
+.period-section-header.collapsed .collapse-arrow {
+  transform: rotate(0deg);
+}
+
+.period-section-header:not(.collapsed) .collapse-arrow {
+  transform: rotate(90deg);
+}
+
+.period-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-height: 2000px;
+  overflow: hidden;
+  transition: max-height var(--duration-normal) var(--ease-standard),
+              opacity var(--duration-normal) var(--ease-standard);
+  opacity: 1;
+}
+
+.period-section-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+}
+
+.period-actions-bar {
+  display: flex;
+  gap: var(--space-10);
+  margin-top: var(--space-20);
+}
+
+/* Enhanced current period styling */
+.period-item.period-current {
+  border-color: var(--color-primary);
+  background: rgba(var(--color-teal-500-rgb), 0.08);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.period-badge {
+  background: var(--color-primary);
+  color: var(--color-btn-primary-text);
+  padding: var(--space-4) var(--space-10);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .period-item.period-current {
+    background: rgba(var(--color-teal-300-rgb), 0.12);
+  }
+}
+
+[data-color-scheme="dark"] .period-item.period-current {
+  background: rgba(var(--color-teal-300-rgb), 0.12);
+}
