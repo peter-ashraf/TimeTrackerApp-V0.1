@@ -94,11 +94,12 @@ class TimeTrackerApp {
   const salaryDivided = employee.salary / 3;
   const salaryTwoThird = salaryDivided * 2;
   const salaryOneThird = salaryDivided * 1;
+  
   // Get overtime total using helper (doesn't touch DOM)
   const totalExtraHoursWithFactor = this.getTimesheetTotals();
   const employeeHourCost = salaryTwoThird / 187.5;
   const overtimeIntoMoney = totalExtraHoursWithFactor * employeeHourCost;
-    const totalSalary = employee.salary + overtimeIntoMoney;
+  const totalSalary = Number(employee.salary + overtimeIntoMoney);
   let html = `
     <h1>Dashboard</h1>
     
@@ -118,7 +119,7 @@ class TimeTrackerApp {
       </div>
       <div class="salary-section">
         <p>Base Salary: <span class="salary-amount">${this.hideSalary ? '••••••' : employee.salary.toLocaleString()} L.E.</span></p>
-        <p>Total Salary: <span class="salary-amount">${this.hideSalary ? '••••••' : totalSalary.toLocaleString()} L.E.</span></p>
+        <p>Total Salary: <span class="salary-amount">${this.hideSalary ? '••••••' : totalSalary ? totalSalary.toLocaleString() : employee.salary.toLocaleString()} L.E.</span></p>
       </div>
 
       
@@ -264,9 +265,7 @@ class TimeTrackerApp {
     document.getElementById('manualCancelBtn').addEventListener('click', () => overlay.remove());
 
     // close on overlay click
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    
 
     document.getElementById('manualSaveBtn').addEventListener('click', () => {
       const applyMode = modeSelect.value;
@@ -328,18 +327,29 @@ class TimeTrackerApp {
   this.renderDashboard();
 }
 
-  renderTimesheet() {
+renderTimesheet() {
   const timesheet = document.getElementById('timesheetScreen');
   const data = this.getTimesheetData();
+  const use12Hour = localStorage.getItem('use12HourFormat') === 'true';
 
   let html = `
     <h1>Timesheet</h1>
     
-    <div class="month-selector">
-      <label>Select Month:</label>
-      <select id="monthSelect">
-        ${this.generateMonthOptions()}
-      </select>
+    <div class="timesheet-controls">
+      <div class="month-selector">
+        <label>Select Month:</label>
+        <select id="monthSelect">
+          ${this.generateMonthOptions()}
+        </select>
+      </div>
+
+      <div class="time-format-toggle">
+        <label class="toggle-switch">
+          <input type="checkbox" id="timeFormatToggle" ${use12Hour ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">${use12Hour ? '12h' : '24h'}</span>
+        </label>
+      </div>
     </div>
 
     <div class="quick-actions">
@@ -373,8 +383,51 @@ class TimeTrackerApp {
   timesheet.innerHTML = html;
   this.populateTimesheetTable();
 
+  // Month selector
   document.getElementById('monthSelect').addEventListener('change', (e) => {
     this.currentMonth = new Date(e.target.value);
+    this.renderTimesheet();
+  });
+
+  // Time format toggle - ✅ UPDATE WITHOUT RE-RENDERING
+  document.getElementById('timeFormatToggle').addEventListener('change', (e) => {
+    const use12Hour = e.target.checked;
+    localStorage.setItem('use12HourFormat', use12Hour);
+    
+    // Update label text manually (no re-render)
+    document.querySelector('.toggle-label').textContent = use12Hour ? '12h' : '24h';
+    
+    // Only refresh the table data
+    this.populateTimesheetTable();
+  });
+
+  // Export/Import
+  document.getElementById('exportCsvBtn').addEventListener('click', () => this.exportCSV());
+  document.getElementById('importCsvBtn').addEventListener('click', () => this.triggerFileInput());
+}
+
+
+attachStaticListeners() {
+  // Time format toggle logic
+  const toggle = document.getElementById('timeFormatToggle');
+  const label = document.querySelector('.toggle-label');
+
+  toggle.addEventListener('change', (e) => {
+    const isChecked = e.target.checked;
+    localStorage.setItem('use12HourFormat', isChecked);
+    
+    // UPDATE UI MANUALLY: This is the secret for animations!
+    label.textContent = isChecked ? '12h' : '24h';
+    
+    // Only refresh the table, don't re-render the whole screen
+    this.populateTimesheetTable(); 
+  });
+
+  // Month selector
+  document.getElementById('monthSelect').addEventListener('change', (e) => {
+    this.currentMonth = new Date(e.target.value);
+    // Since month change might require a full refresh, we can clear and re-render
+    document.getElementById('timesheetScreen').innerHTML = ""; 
     this.renderTimesheet();
   });
 
@@ -388,6 +441,14 @@ getTimesheetTotals() {
 
   data.entries.forEach(entry => {
     if (entry.type === 'Regular' && entry.intervals && entry.intervals.length > 0) {
+      // FIX: Check if all intervals have both in AND out times
+      const allIntervalsComplete = entry.intervals.every(interval => interval.in && interval.out);
+      
+      if (!allIntervalsComplete) {
+        // Skip incomplete entries (NaN prevention)
+        return;
+      }
+
       const workTime = this.calculateWorkTime(entry.intervals);
       const extraMinutes = workTime.extraMinutes;
 
@@ -440,7 +501,7 @@ getTimesheetTotals() {
         <form id="leaveForm">
           <div class="form-group">
             <label>Annual Vacation Days</label>
-            <input type="number" id="annualVacation" value="${localStorage.getItem('annualVacation') || '21'}" placeholder="Annual vacation days">
+            <input type="number" id="annualVacation" value="${localStorage.getItem('annualVacation') || '10'}" placeholder="Annual vacation days">
           </div>
           <div class="form-group">
             <label>Sick Leave Days</label>
@@ -691,8 +752,8 @@ populateTimesheetTable() {
     const row = document.createElement('tr');
 
     let hoursSpent = 0;
-    let extraHoursDisplay = 0;            // can be negative
-    let extraHoursWithFactorDisplay = 0;  // can be negative
+    let extraHoursDisplay = 0;
+    let extraHoursWithFactorDisplay = 0;
     let checkInTime = '';
     let checkOutTime = '';
     let checkInWithinDay = '';
@@ -700,60 +761,75 @@ populateTimesheetTable() {
     let timeOutsideWithinDay = '-';
 
     if (entry.type === 'Regular' && entry.intervals && entry.intervals.length > 0) {
-      // First check‑in and last check‑out
-      checkInTime = entry.intervals[0].in || '';
-      checkOutTime = entry.intervals[entry.intervals.length - 1].out || '';
+      // ✅ NEW LOGIC: First interval is main working hours
+      const mainInterval = entry.intervals[0];
+      checkInTime = mainInterval.in || '';
+      checkOutTime = mainInterval.out || '';
 
-      // Break / within-day info
-      if (entry.intervals.length > 1) {
-        checkOutWithinDay = entry.intervals[0].out || '';
-        checkInWithinDay = entry.intervals[1].in || '';
+      // Check if main interval is complete
+      const mainIntervalComplete = mainInterval.in && mainInterval.out;
 
-        if (checkOutWithinDay && checkInWithinDay) {
-          const toMinutes = t => {
-            const [h, m] = t.split(':').map(Number);
-            return h * 60 + m;
-          };
-          const checkOutMin = toMinutes(checkOutWithinDay);
-          const checkInMin = toMinutes(checkInWithinDay);
+      if (mainIntervalComplete) {
+        // ✅ BREAKS: Additional intervals are breaks (within day)
+        if (entry.intervals.length > 1) {
+          // Get first break (can have multiple breaks)
+          const firstBreak = entry.intervals[1];
+          if (firstBreak && firstBreak.in && firstBreak.out) {
+            checkOutWithinDay = firstBreak.in || '';   // Break start
+            checkInWithinDay = firstBreak.out || '';   // Break end
 
-          const gapMinutes = Math.abs(checkInMin - checkOutMin);
-          const gapHours = Math.floor(gapMinutes / 60);
-          const gapMins = gapMinutes % 60;
-          timeOutsideWithinDay = `${gapHours}:${gapMins.toString().padStart(2, '0')}`;
-        }
-      }
+            if (checkOutWithinDay && checkInWithinDay) {
+              const toMinutes = t => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m;
+              };
+              const breakStart = toMinutes(checkOutWithinDay);
+              const breakEnd = toMinutes(checkInWithinDay);
 
-      // Main work time calculation
-      const workTime = this.calculateWorkTime(entry.intervals);
-      hoursSpent = workTime.decimal;           // total hours (e.g. 8.75)
-      const extraMinutes = workTime.extraMinutes; // number, +ve overtime, -ve shortage
-
-      // Convert extra minutes to hours, including negative
-      if (extraMinutes !== 0) {
-        const extraHoursValue = extraMinutes / 60; // e.g. 0.83 or -0.75
-        extraHoursDisplay = +(extraHoursValue.toFixed(2));
-
-        // Factor: only for positive overtime
-        const dayOfWeek = new Date(entry.date).getDay(); // 0=Sun,6=Sat
-        const isSaturday = dayOfWeek === 6;
-        const isSunday = dayOfWeek === 0;
-        const factor = (isSaturday || isSunday) ? 2 : 1.5;
-
-        let extraHoursWithFactorValue = extraHoursValue;
-        if (extraMinutes > 0) {
-          extraHoursWithFactorValue = extraHoursValue * factor;
+              const gapMinutes = Math.abs(breakEnd - breakStart);
+              const gapHours = Math.floor(gapMinutes / 60);
+              const gapMins = gapMinutes % 60;
+              timeOutsideWithinDay = `${gapHours}:${gapMins.toString().padStart(2, '0')}`;
+            }
+          }
         }
 
-        extraHoursWithFactorDisplay = +(extraHoursWithFactorValue.toFixed(2));
-      }
+        // Main work time calculation
+        const workTime = this.calculateWorkTime(entry.intervals);
+        hoursSpent = workTime.decimal;
+        const extraMinutes = workTime.extraMinutes;
 
-      // Totals (can be negative)
-      totalHoursSpent += hoursSpent;
-      totalExtraHours += extraHoursDisplay;
-      totalExtraHoursWithFactor += extraHoursWithFactorDisplay;
+        // Convert extra minutes to hours
+        if (extraMinutes !== 0) {
+          const extraHoursValue = extraMinutes / 60;
+          extraHoursDisplay = +(extraHoursValue.toFixed(2));
+
+          // Factor: only for positive overtime
+          const dayOfWeek = new Date(entry.date).getDay();
+          const isSaturday = dayOfWeek === 6;
+          const isSunday = dayOfWeek === 0;
+          const factor = (isSaturday || isSunday) ? 2 : 1.5;
+
+          let extraHoursWithFactorValue = extraHoursValue;
+          if (extraMinutes > 0) {
+            extraHoursWithFactorValue = extraHoursValue * factor;
+          }
+
+          extraHoursWithFactorDisplay = +(extraHoursWithFactorValue.toFixed(2));
+        }
+
+        // Totals
+        totalHoursSpent += hoursSpent;
+        totalExtraHours += extraHoursDisplay;
+        totalExtraHoursWithFactor += extraHoursWithFactorDisplay;
+      } else {
+        // Incomplete intervals
+        hoursSpent = '-';
+        extraHoursDisplay = '-';
+        extraHoursWithFactorDisplay = '-';
+      }
     } else {
-      // Non-regular days: keep existing behaviour
+      // Non-regular days
       hoursSpent = entry.hours || '-';
       if (hoursSpent !== '-') {
         totalHoursSpent += parseFloat(hoursSpent);
@@ -766,16 +842,22 @@ populateTimesheetTable() {
       displayType += ' (Half Day)';
     }
 
+    // Format times with 12/24 hour support
+    const formattedCheckIn = this.formatTimeDisplay(checkInTime);
+    const formattedCheckOut = this.formatTimeDisplay(checkOutTime);
+    const formattedCheckOutWithin = this.formatTimeDisplay(checkOutWithinDay);
+    const formattedCheckInWithin = this.formatTimeDisplay(checkInWithinDay);
+
     row.innerHTML = `
       <td>${entry.date}</td>
-      <td>${checkInTime || '-'}</td>
-      <td>${checkOutTime || '-'}</td>
+      <td>${formattedCheckIn || '-'}</td>
+      <td>${formattedCheckOut || '-'}</td>
       <td>${hoursSpent === '-' ? '-' : hoursSpent.toFixed(2) + 'h'}</td>
-      <td>${extraHoursDisplay === 0 ? '-' : extraHoursDisplay.toFixed(2) + 'h'}</td>
-      <td>${extraHoursWithFactorDisplay === 0 ? '-' : extraHoursWithFactorDisplay.toFixed(2) + 'h'}</td>
+      <td>${extraHoursDisplay === '-' ? '-' : (extraHoursDisplay === 0 ? '-' : Number(extraHoursDisplay.toFixed(2)) + 'h')}</td>
+      <td>${extraHoursWithFactorDisplay === '-' ? '-' : (extraHoursWithFactorDisplay === 0 ? '-' : Number(extraHoursWithFactorDisplay.toFixed(2)) + 'h')}</td>
       <td>${displayType}</td>
-      <td>${checkOutWithinDay || '-'}</td>
-      <td>${checkInWithinDay || '-'}</td>
+      <td>${formattedCheckOutWithin || '-'}</td>
+      <td>${formattedCheckInWithin || '-'}</td>
       <td>${timeOutsideWithinDay}</td>
       <td class="actions-cell">
         <button class="btn btn-sm btn-outline action-btn"
@@ -802,10 +884,36 @@ populateTimesheetTable() {
     <td><strong>${totalExtraHours.toFixed(2)}h</strong></td>
     <td><strong>${totalExtraHoursWithFactor.toFixed(2)}h</strong></td>
     <td colspan="4"></td>
+    <td></td>
   `;
   tbody.appendChild(totalsRow);
 
   return totalExtraHoursWithFactor;
+}
+
+
+formatTimeFromDate(date) {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+formatTimeDisplay(time24) {
+  if (!time24 || time24 === '-') return '-';
+  
+  const use12Hour = localStorage.getItem('use12HourFormat') === 'true';
+  
+  if (!use12Hour) {
+    // 24-hour format (no change)
+    return time24;
+  }
+
+  // Convert to 12-hour format
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12; // Convert 0 to 12, 13 to 1, etc.
+  
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
 }
 
 updateTimeEntry(date, field, value) {
@@ -858,21 +966,31 @@ editDayEntry(date) {
   overlay.className = 'modal-overlay';
   overlay.id = 'editDayOverlay';
 
-  let intervalsHtml = '';
+  // Separate main interval from breaks
+  let mainInterval = { in: '', out: '' };
+  let breaks = [];
+
   if (entry.intervals && entry.intervals.length > 0) {
-    entry.intervals.forEach((interval, idx) => {
-      intervalsHtml += `
-        <div class="form-group interval-group">
-          <label>Interval ${idx + 1}</label>
-          <div class="interval-inputs">
-            <input type="time" value="${interval.in}" id="checkIn_${idx}" placeholder="Check In">
-            <input type="time" value="${interval.out}" id="checkOut_${idx}" placeholder="Check Out">
-            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">Remove</button>
-          </div>
-        </div>
-      `;
-    });
+    // First interval is the main working hours
+    mainInterval = entry.intervals[0];
+    // Rest are breaks
+    breaks = entry.intervals.slice(1);
   }
+
+  // Build breaks HTML
+  let breaksHtml = '';
+  breaks.forEach((breakTime, idx) => {
+    breaksHtml += `
+      <div class="form-group interval-group break-group" data-break-idx="${idx}">
+        <label>Break ${idx + 1}</label>
+        <div class="interval-inputs">
+          <input type="time" value="${breakTime.in}" id="breakStart_${idx}" placeholder="Break Start">
+          <input type="time" value="${breakTime.out}" id="breakEnd_${idx}" placeholder="Break End">
+          <button type="button" class="btn btn-sm btn-danger remove-break-btn">Remove</button>
+        </div>
+      </div>
+    `;
+  });
 
   const content = document.createElement('div');
   content.className = 'modal-content';
@@ -891,11 +1009,21 @@ editDayEntry(date) {
         </select>
       </div>
 
-      <div id="intervalsContainer">
-        ${intervalsHtml}
+      <div id="mainIntervalContainer">
+        <div class="form-group interval-group">
+          <label>Working Hours</label>
+          <div class="interval-inputs">
+            <input type="time" value="${mainInterval.in}" id="mainCheckIn" placeholder="First Check-In">
+            <input type="time" value="${mainInterval.out}" id="mainCheckOut" placeholder="Last Check-Out">
+          </div>
+        </div>
       </div>
 
-      <button type="button" class="btn btn-secondary" id="addIntervalBtn">+ Add Interval</button>
+      <div id="breaksContainer">
+        ${breaksHtml}
+      </div>
+
+      <button type="button" class="btn btn-secondary" id="addBreakBtn">+ Add Break</button>
 
       <div class="form-group">
         <label>Notes</label>
@@ -904,7 +1032,7 @@ editDayEntry(date) {
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="document.getElementById('editDayOverlay').remove()">Cancel</button>
+      <button class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
       <button class="btn btn-primary" id="saveEditDayBtn">Save Changes</button>
     </div>
   `;
@@ -912,21 +1040,41 @@ editDayEntry(date) {
   overlay.appendChild(content);
   document.body.appendChild(overlay);
 
-  // Add new interval
-  document.getElementById('addIntervalBtn').addEventListener('click', () => {
-    const container = document.getElementById('intervalsContainer');
-    const newIdx = container.querySelectorAll('.interval-group').length;
-    const newInterval = document.createElement('div');
-    newInterval.className = 'form-group interval-group';
-    newInterval.innerHTML = `
-      <label>Interval ${newIdx + 1}</label>
+  // Add break button
+  document.getElementById('addBreakBtn').addEventListener('click', () => {
+    const container = document.getElementById('breaksContainer');
+    const breakCount = container.querySelectorAll('.break-group').length;
+    const newBreak = document.createElement('div');
+    newBreak.className = 'form-group interval-group break-group';
+    newBreak.setAttribute('data-break-idx', breakCount);
+    newBreak.innerHTML = `
+      <label>Break ${breakCount + 1}</label>
       <div class="interval-inputs">
-        <input type="time" id="checkIn_${newIdx}" placeholder="Check In">
-        <input type="time" id="checkOut_${newIdx}" placeholder="Check Out">
-        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">Remove</button>
+        <input type="time" id="breakStart_${breakCount}" placeholder="Break Start">
+        <input type="time" id="breakEnd_${breakCount}" placeholder="Break End">
+        <button type="button" class="btn btn-sm btn-danger remove-break-btn">Remove</button>
       </div>
     `;
-    container.appendChild(newInterval);
+    container.appendChild(newBreak);
+
+    // Attach remove listener
+    newBreak.querySelector('.remove-break-btn').addEventListener('click', () => {
+      newBreak.remove();
+      this.updateBreakLabels();
+    });
+  });
+
+  // Remove break buttons (for existing breaks)
+  document.querySelectorAll('.remove-break-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.target.closest('.break-group').remove();
+      this.updateBreakLabels();
+    });
+  });
+
+  // Cancel button
+  document.getElementById('cancelEditBtn').addEventListener('click', () => {
+    overlay.remove();
   });
 
   // Save edited entry
@@ -934,36 +1082,61 @@ editDayEntry(date) {
     const updatedType = document.getElementById('editDayType').value;
     const updatedNotes = document.getElementById('editDayNotes').value;
 
+    // Get main interval
+    const mainIn = document.getElementById('mainCheckIn').value;
+    const mainOut = document.getElementById('mainCheckOut').value;
+
+    if (updatedType === 'Regular' && (!mainIn || !mainOut)) {
+      this.showAlert('Please enter both check-in and check-out times');
+      return;
+    }
+
+    // Build intervals array: [main interval, ...breaks]
     const intervals = [];
-    document.querySelectorAll('.interval-group').forEach((group, idx) => {
-      const checkIn = document.getElementById(`checkIn_${idx}`).value;
-      const checkOut = document.getElementById(`checkOut_${idx}`).value;
-      if (checkIn && checkOut) {
-        intervals.push({ in: checkIn, out: checkOut });
-      }
-    });
+    if (updatedType === 'Regular' && mainIn && mainOut) {
+      intervals.push({ in: mainIn, out: mainOut });
+
+      // Add breaks
+      document.querySelectorAll('.break-group').forEach((group) => {
+        const idx = group.getAttribute('data-break-idx');
+        const breakStart = document.getElementById(`breakStart_${idx}`).value;
+        const breakEnd = document.getElementById(`breakEnd_${idx}`).value;
+        if (breakStart && breakEnd) {
+          intervals.push({ in: breakStart, out: breakEnd });
+        }
+      });
+    }
 
     const entryIdx = entries.findIndex(e => e.date === date);
     entries[entryIdx] = {
       date,
       type: updatedType,
-      intervals: updatedType === 'Regular' ? intervals : [],
+      intervals: intervals,
       notes: updatedNotes,
       hours: updatedType === 'Regular' ? null : entry.hours,
       duration: entry.duration || 1
     };
 
     localStorage.setItem('timeEntries', JSON.stringify(entries));
-    document.getElementById('editDayOverlay').remove();
+    overlay.remove();
     this.showAlert('Entry updated!');
     this.renderTimesheet();
     this.renderDashboard();
   });
+}
 
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+// Helper function to update break labels after removal
+updateBreakLabels() {
+  const breakGroups = document.querySelectorAll('.break-group');
+  breakGroups.forEach((group, idx) => {
+    group.setAttribute('data-break-idx', idx);
+    group.querySelector('label').textContent = `Break ${idx + 1}`;
+    const inputs = group.querySelectorAll('input[type="time"]');
+    inputs[0].id = `breakStart_${idx}`;
+    inputs[1].id = `breakEnd_${idx}`;
   });
 }
+
 
 calculateWorkTime(intervals) {
     if (!intervals || intervals.length === 0) {
@@ -971,16 +1144,12 @@ calculateWorkTime(intervals) {
     }
 
     const toMinutes = t => {
-        // Handle null, undefined, or empty string
         if (!t || t.trim() === '') {
             return 0;
         }
         const [h, m] = t.split(':').map(Number);
         return h * 60 + m;
     };
-
-    // Sort intervals just in case
-    intervals = intervals.slice().sort((a, b) => a.in.localeCompare(b.in));
 
     // Filter out intervals with missing check-in or check-out times
     intervals = intervals.filter(interval => interval.in && interval.out);
@@ -989,8 +1158,12 @@ calculateWorkTime(intervals) {
         return { minutes: 0, decimal: 0, display: "0:00" };
     }
 
+    // Sort intervals by check-in time
+    intervals = intervals.slice().sort((a, b) => a.in.localeCompare(b.in));
+
+    // ✅ FIX: Find the actual first check-in and last check-out
     const firstIn = toMinutes(intervals[0].in);
-    const lastOut = toMinutes(intervals[intervals.length - 1].out);
+    const lastOut = Math.max(...intervals.map(iv => toMinutes(iv.out)));  // ← CHANGED
 
     // Permitted break window
     const ALLOWED_START = 13 * 60;     // 13:00
