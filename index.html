@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#208589">
     <meta name="description" content="TimeTracker - A professional time and leave management application">
     <title>TimeTracker - Time Management App</title>
-    <link rel="icon" href="./icons/favicon.png" type="image/png">
+    <link rel="icon" href="./assets/icons/favicon.png" type="image/png">
     
     <!-- External CSS Link -->
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="./css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
 </head>
 <body>
     <!-- Loading Screen -->
@@ -65,9 +65,17 @@
     </div>
 
     <!-- Scripts -->
-    <script src="config.js"></script>
-    <script src="utils.js"></script>
-    <script src="app.js"></script>
+    <script src="./js/config.js"></script>
+    <script src="./js/utils.js"></script>
+    
+    <script src="./js/app/app.core.js"></script>
+    <script src="./js/app/app.system.js"></script>
+    <script src="./js/app/app.periods.js"></script>
+    <script src="./js/app/app.logic.js"></script>
+    <script src="./js/app/app.csv.js"></script>
+    <script src="./js/app/app.ui.js"></script>
+    <script src="./js/main.js"></script>
+
     
     <!-- Register Service Worker -->
     <script>
@@ -78,13 +86,6 @@
         }
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-color-scheme', savedTheme);
-        
-        window.toggleTheme = function() {
-            const current = document.documentElement.getAttribute('data-color-scheme');
-            const newTheme = current === 'light' ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-color-scheme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        };
     </script>
 </body>
 </html>
