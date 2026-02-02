@@ -2280,7 +2280,7 @@ body.salary-blur .overtime-money-amount {
 }
 
 .period-section-header:not(.collapsed) .collapse-arrow {
-  transform: rotate(90deg);
+  transform: rotate(120deg);
 }
 
 .period-section-content {
@@ -2300,10 +2300,33 @@ body.salary-blur .overtime-money-amount {
   margin-bottom: 0;
 }
 
+.period-info {
+  padding: var(--space-12);
+}
+
+.period-actions {
+  padding: var(--space-12);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-12);
+}
+
+.period-actions .btn {
+  width: 100%;
+}
+
 .period-actions-bar {
   display: flex;
   gap: var(--space-10);
   margin-top: var(--space-20);
+}
+
+.period-actions-bar .btn {
+  width: 100%;
+}
+
+.period-item.period-current .period-actions {
+  grid-template-columns: 1fr 1fr;
 }
 
 /* Enhanced current period styling */
@@ -2311,6 +2334,7 @@ body.salary-blur .overtime-money-amount {
   border-color: var(--color-primary);
   background: rgba(var(--color-teal-500-rgb), 0.08);
   box-shadow: 0 0 0 1px var(--color-primary);
+  border-radius: var(--radius-lg);
 }
 
 .period-badge {
@@ -2323,6 +2347,12 @@ body.salary-blur .overtime-money-amount {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.period-item .period-info {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: var(--space-4) !important;
 }
 
 /* Dark mode adjustments */
@@ -2371,6 +2401,11 @@ body.salary-blur .overtime-money-amount {
 @media (max-width: 768px) {
   .hide-mobile {
     display: none;
+  }
+
+  .period-actions .btn {
+    width: 100%;
+    font-size: var(--font-size-sm);
   }
 }
 
@@ -2457,10 +2492,7 @@ body.salary-blur .overtime-money-amount {
 }
 
 /* Ensure table displays correctly after column toggle */
-.data-table th,
-.data-table td {
-  display: table-cell;
-}
+
 
 /* Hide mobile columns by default on mobile */
 @media (max-width: 768px) {
